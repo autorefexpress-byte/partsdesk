@@ -1,0 +1,9 @@
+{
+  "name": "partsdesk",
+  "version": "1.0.0",
+  "description": "Parts catalogue search tool",
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "cheerio": "^1.0.0"
+  }
+}

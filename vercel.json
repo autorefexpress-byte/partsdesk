@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "functions": {
+    "check.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    { "src": "/api/check", "dest": "/check.js" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
