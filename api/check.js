@@ -3,27 +3,25 @@ const fetch = require('node-fetch');
 const SITES = [
   {
     id: 'autodoc',
-    name: 'AUTODOC',
+    name: 'AUTO-DOC',
     desc: 'Aftermarket — prix bas',
-    buildUrl: (q) => `https://www.autodoc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
-    // API JSON interne d'Autodoc — bien plus fiable que le scraping HTML
-    checkUrl: (q) => `https://www.autodoc.fr/api/catalog/fr/search?query=${encodeURIComponent(q)}&page=1&itemsPerPage=5`,
+    // URL correcte avec tiret : auto-doc.fr
+    buildUrl: (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
+    // API de recherche interne auto-doc
+    checkUrl: (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
     hasResult: (body, status) => {
       if (status === 404 || status === 400) return false;
-      try {
-        const json = JSON.parse(body);
-        if (json.totalCount !== undefined) return json.totalCount > 0;
-        if (json.total     !== undefined) return json.total > 0;
-        if (Array.isArray(json.items))    return json.items.length > 0;
-        if (Array.isArray(json.products)) return json.products.length > 0;
-        return body.length > 100 &&
-               !body.includes('"totalCount":0') &&
-               !body.includes('"total":0');
-      } catch {
-        return body.includes('product-card') ||
-               body.includes('search-result') ||
-               body.includes('js-catalog-item');
-      }
+      // auto-doc affiche "Aucun résultat" ou un compteur "0 article"
+      if (body.includes('Aucun r') && body.includes('sultat')) return false;
+      if (body.includes('"totalCount":0')) return false;
+      if (body.includes('0 article') && body.includes('trouv')) return false;
+      // Présence de produits
+      return body.includes('product-card') ||
+             body.includes('article-item') ||
+             body.includes('js-product') ||
+             body.includes('listing-item') ||
+             body.includes('product__title') ||
+             body.includes('data-article-id');
     }
   },
   {
@@ -139,13 +137,7 @@ async function checkSite(site, partNumber) {
     const body = await response.text();
     const found = site.hasResult(body, response.status);
 
-    return {
-      found,
-      url: site.buildUrl(partNumber),
-      name: site.name,
-      desc: site.desc,
-      id: site.id
-    };
+    return { found, url: site.buildUrl(partNumber), name: site.name, desc: site.desc, id: site.id };
   } catch (err) {
     return { found: false, error: err.message, id: site.id, name: site.name, desc: site.desc };
   }
@@ -155,37 +147,22 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { q, sites } = req.query;
-  if (!q || q.trim().length < 3) {
-    return res.status(400).json({ error: 'Référence trop courte (min 3 caractères)' });
-  }
+  if (!q || q.trim().length < 3) return res.status(400).json({ error: 'Référence trop courte (min 3 caractères)' });
 
   const partNumber = q.trim().toUpperCase();
   const requestedSites = sites ? sites.split(',') : SITES.map(s => s.id);
   const sitesToCheck = SITES.filter(s => requestedSites.includes(s.id));
 
-  const results = await Promise.allSettled(
-    sitesToCheck.map(site => checkSite(site, partNumber))
-  );
+  const results = await Promise.allSettled(sitesToCheck.map(site => checkSite(site, partNumber)));
 
-  const found = [];
-  const notFound = [];
-
+  const found = [], notFound = [];
   results.forEach((result, i) => {
     const site = sitesToCheck[i];
-    if (result.status === 'fulfilled' && result.value.found) {
-      found.push(result.value);
-    } else {
-      notFound.push({
-        id: site.id,
-        name: site.name,
-        desc: site.desc,
-        error: result.value?.error || null
-      });
-    }
+    if (result.status === 'fulfilled' && result.value.found) found.push(result.value);
+    else notFound.push({ id: site.id, name: site.name, desc: site.desc, error: result.value?.error || null });
   });
 
   return res.status(200).json({ partNumber, found, notFound, total: found.length });
