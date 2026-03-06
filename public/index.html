@@ -439,24 +439,25 @@
 
   function renderResults(data, ref) {
     let html = '';
+    const directLinks = data.directLinks || [];
 
     // Summary bar
     html += `<div class="summary-bar">
-      <span class="summary-found">✓ ${data.found.length} trouvé${data.found.length > 1 ? 's' : ''}</span>
+      <span class="summary-found">✓ ${data.found.length} vérifié${data.found.length > 1 ? 's' : ''} trouvé${data.found.length > 1 ? 's' : ''}</span>
       <span class="summary-notfound">✗ ${data.notFound.length} non trouvé${data.notFound.length > 1 ? 's' : ''}</span>
+      ${directLinks.length > 0 ? `<span style="color:var(--accent2)">⤷ ${directLinks.length} lien${directLinks.length > 1 ? 's' : ''} direct${directLinks.length > 1 ? 's' : ''}</span>` : ''}
     </div>`;
 
+    // Verified found
     if (data.found.length > 0) {
-      html += `<div class="result-section-label found-label">▸ Disponible sur ces sites</div>`;
+      html += `<div class="result-section-label found-label">▸ Pièce trouvée — vérifiée</div>`;
       data.found.forEach((site, i) => {
         html += `
           <a class="result-card found" href="${site.url}" target="_blank" style="animation-delay:${i * 50}ms">
-            <div class="result-left">
-              <div>
-                <div class="result-site-name">${site.name}</div>
-                <div class="result-site-desc">${site.desc}</div>
-              </div>
-            </div>
+            <div class="result-left"><div>
+              <div class="result-site-name">${site.name}</div>
+              <div class="result-site-desc">${site.desc}</div>
+            </div></div>
             <div style="display:flex;align-items:center;gap:18px">
               <div class="result-ref">${ref}</div>
               <div class="result-arrow">→</div>
@@ -465,18 +466,37 @@
       });
     }
 
+    // Direct links (JS-rendered sites — can't verify server-side)
+    if (directLinks.length > 0) {
+      html += `<div class="result-section-label" style="color:var(--accent2);margin-top:${data.found.length > 0 ? 16 : 0}px">▸ Lien direct — résultats à vérifier sur le site</div>`;
+      directLinks.forEach((site, i) => {
+        html += `
+          <a class="result-card" href="${site.url}" target="_blank" style="animation-delay:${(data.found.length + i) * 50}ms;border-left:3px solid var(--accent2)">
+            <div class="result-left"><div>
+              <div class="result-site-name" style="color:var(--accent2)">${site.name}</div>
+              <div class="result-site-desc">${site.desc}</div>
+            </div></div>
+            <div style="display:flex;align-items:center;gap:18px">
+              <div class="result-ref" style="color:var(--accent2)">${ref}</div>
+              <div class="result-arrow">→</div>
+            </div>
+          </a>`;
+      });
+    }
+
+    // Not found
     if (data.notFound.length > 0) {
       html += `<div class="result-section-label notfound-label" style="margin-top:16px">▸ Non trouvé</div>`;
       data.notFound.forEach((site, i) => {
         html += `
-          <div class="notfound-card" style="animation-delay:${(data.found.length + i) * 40}ms">
+          <div class="notfound-card" style="animation-delay:${(data.found.length + directLinks.length + i) * 40}ms">
             <div class="notfound-name">${site.name}</div>
             <div class="notfound-tag">NON DISPONIBLE</div>
           </div>`;
       });
     }
 
-    if (data.found.length === 0 && data.notFound.length === 0) {
+    if (data.found.length === 0 && data.notFound.length === 0 && directLinks.length === 0) {
       html = `<div class="empty-hint">Aucun résultat trouvé pour <span>${ref}</span></div>`;
     }
 
