@@ -1,29 +1,7 @@
 const fetch = require('node-fetch');
 
-const SITES = [
-  {
-    id: 'autodoc',
-    name: 'AUTO-DOC',
-    desc: 'Aftermarket — prix bas',
-    // URL correcte avec tiret : auto-doc.fr
-    buildUrl: (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
-    // API de recherche interne auto-doc
-    checkUrl: (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
-    hasResult: (body, status) => {
-      if (status === 404 || status === 400) return false;
-      // auto-doc affiche "Aucun résultat" ou un compteur "0 article"
-      if (body.includes('Aucun r') && body.includes('sultat')) return false;
-      if (body.includes('"totalCount":0')) return false;
-      if (body.includes('0 article') && body.includes('trouv')) return false;
-      // Présence de produits
-      return body.includes('product-card') ||
-             body.includes('article-item') ||
-             body.includes('js-product') ||
-             body.includes('listing-item') ||
-             body.includes('product__title') ||
-             body.includes('data-article-id');
-    }
-  },
+// Sites vérifiables côté serveur (HTML statique ou API JSON)
+const CHECKABLE_SITES = [
   {
     id: 'ebay',
     name: 'EBAY',
@@ -44,36 +22,7 @@ const SITES = [
     checkUrl: (q) => `https://partsouq.com/en/search/all?q=${encodeURIComponent(q)}`,
     hasResult: (body) => {
       if (body.includes('No results found') || body.includes('no-results-found')) return false;
-      return body.includes('part-number') ||
-             body.includes('catalog-item') ||
-             body.includes('search-item');
-    }
-  },
-  {
-    id: 'oscaro',
-    name: 'OSCARO',
-    desc: 'Leader FR pièces détachées',
-    buildUrl: (q) => `https://www.oscaro.com/search#search=${encodeURIComponent(q)}`,
-    checkUrl: (q) => `https://www.oscaro.com/search?search=${encodeURIComponent(q)}`,
-    hasResult: (body) => {
-      if (body.includes('Aucun r&#233;sultat') || body.includes('Aucun résultat')) return false;
-      if (body.includes('"nbHits":0') || body.includes('"count":0')) return false;
-      return body.includes('product-card') ||
-             body.includes('js-product') ||
-             body.includes('oscaro-product');
-    }
-  },
-  {
-    id: 'pieceauto24',
-    name: 'PIECE-AUTO24',
-    desc: 'Pièces FR — livraison rapide',
-    buildUrl: (q) => `https://www.piece-auto24.fr/search?search=${encodeURIComponent(q)}`,
-    checkUrl: (q) => `https://www.piece-auto24.fr/search?search=${encodeURIComponent(q)}`,
-    hasResult: (body) => {
-      if (body.includes('Aucun produit') || body.includes('0 produit')) return false;
-      return body.includes('product-miniature') ||
-             body.includes('product-title') ||
-             body.includes('js-product-list');
+      return body.includes('part-number') || body.includes('catalog-item') || body.includes('search-item');
     }
   },
   {
@@ -84,9 +33,7 @@ const SITES = [
     checkUrl: (q) => `https://www.megazip.net/zapchasti-dlya-avtomobilej?article=${encodeURIComponent(q)}`,
     hasResult: (body) => {
       if (body.includes('Nothing found') || body.includes('no results')) return false;
-      return body.includes('catalog-item') ||
-             body.includes('part-row') ||
-             body.includes('search-result-item');
+      return body.includes('catalog-item') || body.includes('part-row') || body.includes('search-result-item');
     }
   },
   {
@@ -97,9 +44,7 @@ const SITES = [
     checkUrl: (q) => `https://www.rockauto.com/en/partsearch/?q=${encodeURIComponent(q)}`,
     hasResult: (body) => {
       if (body.includes('No parts found') || body.includes('partnotfound')) return false;
-      return body.includes('[listing,') ||
-             body.includes('ra-partnum') ||
-             body.includes('jspartinfo');
+      return body.includes('[listing,') || body.includes('ra-partnum') || body.includes('jspartinfo');
     }
   },
   {
@@ -110,13 +55,30 @@ const SITES = [
     checkUrl: (q) => `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(q)}&IndexArea=product_en`,
     hasResult: (body) => {
       if (body.includes('Sorry, no results') || body.includes('0 products')) return false;
-      if (body.includes('"total":0') || body.includes('"count":"0"')) return false;
-      return body.includes('organic-list-item') ||
-             body.includes('J-product-item') ||
-             body.includes('J-offer-wrapper') ||
-             body.includes('list-no-v2-outter') ||
-             body.includes('m-gallery-product-item');
+      return body.includes('organic-list-item') || body.includes('J-product-item') || body.includes('m-gallery-product-item');
     }
+  }
+];
+
+// Sites avec rendu JS dynamique — on renvoie toujours le lien direct sans vérifier
+const DIRECT_LINK_SITES = [
+  {
+    id: 'autodoc',
+    name: 'AUTO-DOC',
+    desc: 'Aftermarket — prix bas',
+    buildUrl: (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`
+  },
+  {
+    id: 'oscaro',
+    name: 'OSCARO',
+    desc: 'Leader FR pièces détachées',
+    buildUrl: (q) => `https://www.oscaro.com/search#search=${encodeURIComponent(q)}`
+  },
+  {
+    id: 'pieceauto24',
+    name: 'PIECE-AUTO24',
+    desc: 'Pièces FR — livraison rapide',
+    buildUrl: (q) => `https://www.piece-auto24.fr/search?search=${encodeURIComponent(q)}`
   }
 ];
 
@@ -126,17 +88,14 @@ async function checkSite(site, partNumber) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/json,*/*;q=0.9',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8',
+        'Cache-Control': 'no-cache'
       },
       timeout: 10000,
       redirect: 'follow'
     });
-
     const body = await response.text();
     const found = site.hasResult(body, response.status);
-
     return { found, url: site.buildUrl(partNumber), name: site.name, desc: site.desc, id: site.id };
   } catch (err) {
     return { found: false, error: err.message, id: site.id, name: site.name, desc: site.desc };
@@ -153,17 +112,25 @@ module.exports = async (req, res) => {
   if (!q || q.trim().length < 3) return res.status(400).json({ error: 'Référence trop courte (min 3 caractères)' });
 
   const partNumber = q.trim().toUpperCase();
-  const requestedSites = sites ? sites.split(',') : SITES.map(s => s.id);
-  const sitesToCheck = SITES.filter(s => requestedSites.includes(s.id));
+  const requestedSites = sites ? sites.split(',') : [...CHECKABLE_SITES, ...DIRECT_LINK_SITES].map(s => s.id);
 
-  const results = await Promise.allSettled(sitesToCheck.map(site => checkSite(site, partNumber)));
+  // Vérification serveur pour les sites compatibles
+  const checkable = CHECKABLE_SITES.filter(s => requestedSites.includes(s.id));
+  const results = await Promise.allSettled(checkable.map(site => checkSite(site, partNumber)));
 
-  const found = [], notFound = [];
+  const found = [];
+  const notFound = [];
+
   results.forEach((result, i) => {
-    const site = sitesToCheck[i];
+    const site = checkable[i];
     if (result.status === 'fulfilled' && result.value.found) found.push(result.value);
     else notFound.push({ id: site.id, name: site.name, desc: site.desc, error: result.value?.error || null });
   });
 
-  return res.status(200).json({ partNumber, found, notFound, total: found.length });
+  // Sites à lien direct (pas de vérification — toujours affichés)
+  const directLinks = DIRECT_LINK_SITES
+    .filter(s => requestedSites.includes(s.id))
+    .map(s => ({ id: s.id, name: s.name, desc: s.desc, url: s.buildUrl(partNumber), direct: true }));
+
+  return res.status(200).json({ partNumber, found, notFound, directLinks, total: found.length });
 };
