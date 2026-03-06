@@ -392,7 +392,28 @@
     else activeSites.add(site);
   }
 
-  async function searchPart() {
+  const SITE_URLS = {
+    autodoc:     (q) => `https://www.auto-doc.fr/recherche?searchType=article&searchValue=${encodeURIComponent(q)}`,
+    ebay:        (q) => `https://www.ebay.fr/sch/i.html?_nkw=${encodeURIComponent(q)}+piece+auto&_sacat=6030`,
+    partsouq:    (q) => `https://partsouq.com/en/search/all?q=${encodeURIComponent(q)}`,
+    oscaro:      (q) => `https://www.oscaro.com/search#search=${encodeURIComponent(q)}`,
+    pieceauto24: (q) => `https://www.piece-auto24.fr/search?search=${encodeURIComponent(q)}`,
+    megazip:     (q) => `https://www.megazip.net/zapchasti-dlya-avtomobilej?article=${encodeURIComponent(q)}`,
+    rockauto:    (q) => `https://www.rockauto.com/en/partsearch/?q=${encodeURIComponent(q)}`,
+    alibaba:     (q) => `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(q)}&IndexArea=product_en`,
+  };
+  const SITE_INFO = {
+    autodoc:     { name: 'AUTO-DOC',     desc: 'Aftermarket — prix bas' },
+    ebay:        { name: 'EBAY',         desc: 'Neuf & occasion' },
+    partsouq:    { name: 'PARTSOUQ',     desc: 'OEM — Moyen-Orient' },
+    oscaro:      { name: 'OSCARO',       desc: 'Leader FR pièces détachées' },
+    pieceauto24: { name: 'PIECE-AUTO24', desc: 'Pièces FR — livraison rapide' },
+    megazip:     { name: 'MEGAZIP',      desc: 'OEM japonaises & autres' },
+    rockauto:    { name: 'ROCKAUTO',     desc: 'USA — toutes marques' },
+    alibaba:     { name: 'ALIBABA',      desc: 'Fournisseurs Chine — gros' },
+  };
+
+  function searchPart() {
     const ref = partInput.value.trim().toUpperCase();
     if (!ref || ref.length < 3) {
       partStatus.textContent = '⚠ Référence trop courte (min 3 caractères)';
@@ -404,33 +425,21 @@
       partStatus.className = 'status-msg error';
       return;
     }
-    partSearchBtn.disabled = true;
-    partSearchBtn.innerHTML = '⟳ &nbsp;Génération...';
-    try {
-      const sitesParam = Array.from(activeSites).join(',');
-      const response = await fetch(`/api/check?q=${encodeURIComponent(ref)}&sites=${sitesParam}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erreur serveur');
-      renderResults(data, ref);
-      partStatus.textContent = `✓ ${data.total} lien${data.total > 1 ? 's' : ''} généré${data.total > 1 ? 's' : ''} — ${ref}`;
-      partStatus.className = 'status-msg ok';
-    } catch (err) {
-      partStatus.textContent = `⚠ Erreur : ${err.message}`;
-      partStatus.className = 'status-msg error';
-      resultArea.innerHTML = `<div class="empty-hint">Erreur. Vérifie ta connexion.</div>`;
-    } finally {
-      partSearchBtn.disabled = false;
-      partSearchBtn.innerHTML = '▶ &nbsp;Ouvrir les sites';
-    }
+    const links = Array.from(activeSites).map(id => ({
+      id, name: SITE_INFO[id].name, desc: SITE_INFO[id].desc, url: SITE_URLS[id](ref)
+    }));
+    renderResults(links, ref);
+    partStatus.textContent = `✓ ${links.length} lien${links.length > 1 ? 's' : ''} généré${links.length > 1 ? 's' : ''} — ${ref}`;
+    partStatus.className = 'status-msg ok';
   }
 
-  function renderResults(data, ref) {
-    if (!data.links || data.links.length === 0) {
+  function renderResults(links, ref) {
+    if (!links || links.length === 0) {
       resultArea.innerHTML = `<div class="empty-hint">Aucun site sélectionné.</div>`;
       return;
     }
-    let html = `<div class="result-section-label found-label">▸ ${data.links.length} site${data.links.length > 1 ? 's' : ''} — clique pour rechercher</div>`;
-    data.links.forEach((site, i) => {
+    let html = `<div class="result-section-label found-label">▸ ${links.length} site${links.length > 1 ? 's' : ''} — clique pour rechercher</div>`;
+    links.forEach((site, i) => {
       html += `
         <a class="result-card found" href="${site.url}" target="_blank" style="animation-delay:${i * 40}ms">
           <div class="result-left"><div>
