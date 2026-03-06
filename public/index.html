@@ -266,7 +266,7 @@
 <div class="panel" id="panel-part">
   <div class="eyebrow eyebrow-part">● Recherche par référence pièce</div>
   <h1>RECHERCHE<em class="part-color">PART NUMBER</em></h1>
-  <p class="subtitle">VÉRIFICATION EN DIRECT — SEULEMENT LES SITES OÙ LA PIÈCE EXISTE</p>
+  <p class="subtitle">LIENS DIRECTS VERS LES SITES SÉLECTIONNÉS</p>
 
   <div class="search-box">
     <div class="input-wrapper" id="part-wrapper">
@@ -275,7 +275,7 @@
         placeholder="ex: 34116864906" autocomplete="off" spellcheck="false"/>
     </div>
     <div class="btn-row">
-      <button class="btn btn-part" id="part-search-btn" onclick="searchPart()">▶ &nbsp;Vérifier les sites</button>
+      <button class="btn btn-part" id="part-search-btn" onclick="searchPart()">▶ &nbsp;Ouvrir les sites</button>
       <button class="btn btn-clear" onclick="clearPart()">✕</button>
     </div>
     <div class="status-msg" id="part-status"></div>
@@ -304,8 +304,8 @@
 
     <div id="result-area">
       <div class="empty-hint">
-        Tape une référence et clique sur <span>Vérifier les sites</span><br>
-        Seuls les sites où la pièce <span>existe réellement</span> apparaîtront
+        Tape une référence et clique sur <span>Ouvrir les sites</span><br>
+        Les liens de chaque site actif s'affichent ici
       </div>
     </div>
   </div>
@@ -404,102 +404,45 @@
       partStatus.className = 'status-msg error';
       return;
     }
-
-    // Show loading
     partSearchBtn.disabled = true;
-    partSearchBtn.innerHTML = '⟳ &nbsp;Vérification...';
-    partStatus.textContent = `Interrogation de ${activeSites.size} site${activeSites.size > 1 ? 's' : ''}...`;
-    partStatus.className = 'status-msg';
-    resultArea.innerHTML = `
-      <div class="loading-row">
-        <div class="spinner"></div>
-        <div class="loading-text">VÉRIFICATION EN COURS</div>
-      </div>`;
-
+    partSearchBtn.innerHTML = '⟳ &nbsp;Génération...';
     try {
       const sitesParam = Array.from(activeSites).join(',');
       const response = await fetch(`/api/check?q=${encodeURIComponent(ref)}&sites=${sitesParam}`);
       const data = await response.json();
-
       if (!response.ok) throw new Error(data.error || 'Erreur serveur');
-
       renderResults(data, ref);
-      partStatus.textContent = `✓ Vérification terminée — ${data.found.length} site${data.found.length > 1 ? 's' : ''} trouvé${data.found.length > 1 ? 's' : ''}`;
-      partStatus.className = data.found.length > 0 ? 'status-msg ok' : 'status-msg warn';
-
+      partStatus.textContent = `✓ ${data.total} lien${data.total > 1 ? 's' : ''} généré${data.total > 1 ? 's' : ''} — ${ref}`;
+      partStatus.className = 'status-msg ok';
     } catch (err) {
       partStatus.textContent = `⚠ Erreur : ${err.message}`;
       partStatus.className = 'status-msg error';
-      resultArea.innerHTML = `<div class="empty-hint">Erreur lors de la vérification.<br>Vérifie ta connexion ou réessaie.</div>`;
+      resultArea.innerHTML = `<div class="empty-hint">Erreur. Vérifie ta connexion.</div>`;
     } finally {
       partSearchBtn.disabled = false;
-      partSearchBtn.innerHTML = '▶ &nbsp;Vérifier les sites';
+      partSearchBtn.innerHTML = '▶ &nbsp;Ouvrir les sites';
     }
   }
 
   function renderResults(data, ref) {
-    let html = '';
-    const directLinks = data.directLinks || [];
-
-    // Summary bar
-    html += `<div class="summary-bar">
-      <span class="summary-found">✓ ${data.found.length} vérifié${data.found.length > 1 ? 's' : ''} trouvé${data.found.length > 1 ? 's' : ''}</span>
-      <span class="summary-notfound">✗ ${data.notFound.length} non trouvé${data.notFound.length > 1 ? 's' : ''}</span>
-      ${directLinks.length > 0 ? `<span style="color:var(--accent2)">⤷ ${directLinks.length} lien${directLinks.length > 1 ? 's' : ''} direct${directLinks.length > 1 ? 's' : ''}</span>` : ''}
-    </div>`;
-
-    // Verified found
-    if (data.found.length > 0) {
-      html += `<div class="result-section-label found-label">▸ Pièce trouvée — vérifiée</div>`;
-      data.found.forEach((site, i) => {
-        html += `
-          <a class="result-card found" href="${site.url}" target="_blank" style="animation-delay:${i * 50}ms">
-            <div class="result-left"><div>
-              <div class="result-site-name">${site.name}</div>
-              <div class="result-site-desc">${site.desc}</div>
-            </div></div>
-            <div style="display:flex;align-items:center;gap:18px">
-              <div class="result-ref">${ref}</div>
-              <div class="result-arrow">→</div>
-            </div>
-          </a>`;
-      });
+    if (!data.links || data.links.length === 0) {
+      resultArea.innerHTML = `<div class="empty-hint">Aucun site sélectionné.</div>`;
+      return;
     }
-
-    // Direct links (JS-rendered sites — can't verify server-side)
-    if (directLinks.length > 0) {
-      html += `<div class="result-section-label" style="color:var(--accent2);margin-top:${data.found.length > 0 ? 16 : 0}px">▸ Lien direct — résultats à vérifier sur le site</div>`;
-      directLinks.forEach((site, i) => {
-        html += `
-          <a class="result-card" href="${site.url}" target="_blank" style="animation-delay:${(data.found.length + i) * 50}ms;border-left:3px solid var(--accent2)">
-            <div class="result-left"><div>
-              <div class="result-site-name" style="color:var(--accent2)">${site.name}</div>
-              <div class="result-site-desc">${site.desc}</div>
-            </div></div>
-            <div style="display:flex;align-items:center;gap:18px">
-              <div class="result-ref" style="color:var(--accent2)">${ref}</div>
-              <div class="result-arrow">→</div>
-            </div>
-          </a>`;
-      });
-    }
-
-    // Not found
-    if (data.notFound.length > 0) {
-      html += `<div class="result-section-label notfound-label" style="margin-top:16px">▸ Non trouvé</div>`;
-      data.notFound.forEach((site, i) => {
-        html += `
-          <div class="notfound-card" style="animation-delay:${(data.found.length + directLinks.length + i) * 40}ms">
-            <div class="notfound-name">${site.name}</div>
-            <div class="notfound-tag">NON DISPONIBLE</div>
-          </div>`;
-      });
-    }
-
-    if (data.found.length === 0 && data.notFound.length === 0 && directLinks.length === 0) {
-      html = `<div class="empty-hint">Aucun résultat trouvé pour <span>${ref}</span></div>`;
-    }
-
+    let html = `<div class="result-section-label found-label">▸ ${data.links.length} site${data.links.length > 1 ? 's' : ''} — clique pour rechercher</div>`;
+    data.links.forEach((site, i) => {
+      html += `
+        <a class="result-card found" href="${site.url}" target="_blank" style="animation-delay:${i * 40}ms">
+          <div class="result-left"><div>
+            <div class="result-site-name">${site.name}</div>
+            <div class="result-site-desc">${site.desc}</div>
+          </div></div>
+          <div style="display:flex;align-items:center;gap:18px">
+            <div class="result-ref">${ref}</div>
+            <div class="result-arrow">→</div>
+          </div>
+        </a>`;
+    });
     resultArea.innerHTML = html;
   }
 
@@ -507,7 +450,7 @@
     partInput.value = '';
     partStatus.textContent = '';
     partStatus.className = 'status-msg';
-    resultArea.innerHTML = `<div class="empty-hint">Tape une référence et clique sur <span>Vérifier les sites</span><br>Seuls les sites où la pièce <span>existe réellement</span> apparaîtront</div>`;
+    resultArea.innerHTML = `<div class="empty-hint">Tape une référence et clique sur <span>Ouvrir les sites</span><br>Les liens de chaque site actif s'affichent ici</div>`;
     partInput.focus();
   }
 
